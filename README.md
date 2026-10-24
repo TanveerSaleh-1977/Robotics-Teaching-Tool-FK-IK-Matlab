@@ -7,8 +7,8 @@ frame**, so the gap between "asked" and "achieved" is visible, not just printed.
 
 ![Forward kinematics on the left, inverse kinematics on the right: a planar 3R arm at the pose the solver found for x = 0.45, y = 0.20, yaw = 60°](screenshots/fk_ik_planar.png)
 
-A single self-contained MATLAB script. No data files, no Symbolic Math Toolbox, no toolboxes
-beyond the Robotics System Toolbox.
+One self-contained MATLAB script. No data files, and no toolbox besides the Robotics System
+Toolbox.
 
 ---
 
