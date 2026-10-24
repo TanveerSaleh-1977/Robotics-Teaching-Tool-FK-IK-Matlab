@@ -28,10 +28,12 @@
 %  FK is a function: one pose per joint vector. IK is not. A 3-DOF arm asked
 %  for a full 6-DOF pose is over-constrained, and even when a pose is
 %  reachable there are usually SEVERAL joint vectors that produce it (elbow
-%  up / elbow down). The right panel shows one of them and lets you step
-%  through the others with < and >. Press "Use FK pose" to copy the left
-%  panel's pose into the target: the solver must then return the left panel's
-%  joint values, which is the cleanest check that the two panels agree.
+%  up / elbow down). The right panel shows one of them, lets you step through
+%  the others with < and >, and can draw any of them - or all of them - at
+%  once as coloured ghosts, so the postures can be compared side by side.
+%  Press "Use FK pose" to copy the left panel's pose into the target: the
+%  solver must then return the left panel's joint values, which is the
+%  cleanest check that the two panels agree.
 %
 %  HOW THE INVERSE KINEMATICS IS SOLVED
 %  ------------------------------------
@@ -83,6 +85,9 @@
 %                     "Apply to FK"  copies the solution back to the left panel,
 %                                    so both arms stand in the same pose.
 %                     < >            step through the other solutions.
+%                     Show all       draw every posture the solver found.
+%                     1 2 3 ...      one chip per posture: tick the ones you
+%                                    want on screen (coloured ghosts).
 %   TOP               XY / YZ / ZX / 3D set the camera of BOTH panels; they are
 %                     linked, so the two arms are always seen from one viewpoint.
 %                     "New robot" reopens the form to change the configuration.
@@ -95,7 +100,8 @@
 %      the error, then tick "Ignore orientation" and solve again: the arm now
 %      gets as close as it can, and the ghost frame shows the gap.
 %   3. Set x = 0.45, y = 0.20, z = 0, yaw = 60 and solve: two solutions
-%      (elbow up / elbow down). Step through them with < >.
+%      (elbow up / elbow down). Step through them with < >, then tick
+%      "Show all" to see both postures at once.
 %   4. SCARA: joints RRPR, lengths 0.35 0.25 0.20 0, offsets 0.50 0 0 0.
 %      Type a pick-and-place pose and watch q3 (the vertical slide) do the
 %      work; the arm keeps its tool vertical.
@@ -406,12 +412,34 @@ chkOrient = uicontrol(pI,'Style','checkbox','Units','normalized', ...
     'TooltipString','For arms whose tool angle is fixed by the position', ...
     'Callback', @(~,~) dhIKSolve(fig, false));
 
+% --- the "show several postures" row -------------------------------------
+% One chip per posture the solver finds (at most 8). Ticking a chip draws that
+% posture as a translucent ghost; the posture selected with < > is always the
+% solid arm. "Show all" ticks every chip at once.
+chipCol = dhGhostColours();
+chkAll = uicontrol(pI,'Style','checkbox','Units','normalized', ...
+    'Position',[0.020 0.322 0.150 0.075], ...
+    'String','Show all','Value',0,'FontSize',9.5, ...
+    'BackgroundColor',[0.96 0.96 0.96], ...
+    'TooltipString',['Draw every posture the solver found, not just the ' ...
+                     'selected one'], ...
+    'Callback', @(~,~) dhShowAll(fig));
+solChip = gobjects(1,8);
+for k = 1:8
+    solChip(k) = uicontrol(pI,'Style','togglebutton','Units','normalized', ...
+        'Position',[0.180+(k-1)*0.088 0.322 0.080 0.075], ...
+        'String',sprintf('%d',k),'FontSize',9,'FontWeight','bold', ...
+        'Value',0,'Visible','off','BackgroundColor',[0.90 0.90 0.90], ...
+        'TooltipString',sprintf('Show posture %d of the solutions found',k), ...
+        'Callback', @(~,~) dhChipToggle(fig, k));
+end
+
 ikHead = uicontrol(pI,'Style','text','Units','normalized', ...
-    'Position',[0.020 0.250 0.960 0.110], ...
+    'Position',[0.020 0.222 0.960 0.090], ...
     'String','','FontSize',10.5,'FontWeight','bold', ...
     'HorizontalAlignment','left','BackgroundColor',[0.96 0.96 0.96]);
 ikBody = uicontrol(pI,'Style','text','Units','normalized', ...
-    'Position',[0.020 0.012 0.960 0.225], ...
+    'Position',[0.020 0.012 0.960 0.200], ...
     'String',{''},'FontName','FixedWidth','FontSize',9, ...
     'HorizontalAlignment','left','BackgroundColor',[1 1 1], ...
     'ForegroundColor',[0.15 0.15 0.15]);
@@ -448,6 +476,8 @@ S = struct( ...
     'edtX',edtX, 'edtY',edtY, 'edtZ',edtZ, ...
     'edtRoll',edtRoll, 'edtPitch',edtPitch, 'edtYaw',edtYaw, ...
     'chkOrient',chkOrient, 'chkLink',chkLink, 'solLabel',solLabel, ...
+    'chkAll',chkAll, 'solChip',solChip, 'chipCol',chipCol, ...
+    'ghost',{cell(1,8)}, 'ghostOn',false(1,8), 'showAll',false, ...
     'robot',robot, 'DH',DH, 'Tt',[], 'sols',[], 'solIdx',0, ...
     'useOrient',true, 'reach',reach0, 'reachPlot',reach0, ...
     'lastJoint',qInit, 'lastLen',linkLengths*1000, ...
@@ -1585,6 +1615,11 @@ S.DH    = DH;
 S.robot = dhBuildRobot(DH, L);
 S.gF    = dhSetGeometry(S.gF, DH, L);
 S.gI    = dhSetGeometry(S.gI, DH, L);
+for k = 1:numel(S.ghost)
+    if ~isempty(S.ghost{k}) && isgraphics(S.ghost{k}.link)
+        S.ghost{k} = dhSetGeometry(S.ghost{k}, DH, L);
+    end
+end
 S.reach = dhReach(DH, L);
 setappdata(fig,'dhstate',S);
 
@@ -1761,8 +1796,10 @@ end
 sols = dhSolveIK(S.DH, L, q0, Tt, S.useOrient);
 
 S = getappdata(fig,'dhstate');
-S.sols   = sols;
-S.solIdx = 1;
+S.sols    = sols;
+S.solIdx  = 1;
+S.ghostOn = false(1,8);
+S.ghostOn(1:numel(sols)) = S.showAll;   % "Show all" survives a new target
 setappdata(fig,'dhstate',S);
 dhIKDraw(fig);
 end
@@ -1778,6 +1815,13 @@ sol = S.sols(S.solIdx);
 [T, Tf] = dhFKchain(S.DH, sol.q);
 dhUpdateVisuals(S.gI, S.N, Tf, T(1:3,4), S.reachPlot);
 dhUpdateTarget(S.gt, S.Tt, S.reachPlot);
+
+% The other postures, if their chips are ticked. They are drawn as translucent
+% ghosts under the solid arm, so several postures can be compared at once.
+[~, L] = dhReadQL(fig);
+S = dhGhostDraw(S, L);
+dhChipPaint(S);
+setappdata(fig,'dhstate',S);
 
 % The gap between "asked" and "achieved", drawn as a dotted red segment.
 pA = T(1:3,4);
@@ -1810,6 +1854,7 @@ else
 end
 
 [roll, pitch, yaw] = dhR2rpy(T(1:3,1:3));
+nGhost = sum(S.ghostOn(1:numel(S.sols))) - S.ghostOn(S.solIdx);
 lines = { ...
     sprintf('pos err = %6.2f mm      ori err = %6.2f deg', ...
         sol.pe*1000, sol.ae*180/pi), ...
@@ -1829,6 +1874,11 @@ if ~exact
     else
         lines{end+1} = 'Tick "Ignore orientation" to solve for position only.';
     end
+elseif numel(S.sols) > 1 && nGhost == 1
+    lines{end+1} = 'The other posture is drawn as a ghost - < > picks the solid one.';
+elseif numel(S.sols) > 1 && nGhost > 1
+    lines{end+1} = sprintf('%d other postures drawn as ghosts - < > picks the solid one.', ...
+        nGhost);
 elseif numel(S.sols) > 1
     lines{end+1} = 'Press < > for the other postures (elbow up / down).';
 end
@@ -1883,6 +1933,122 @@ S = getappdata(fig,'dhstate');
 if ~isvalid(fig) || isempty(S.sols), return; end
 n = numel(S.sols);
 S.solIdx = mod(S.solIdx - 1 + d, n) + 1;
+setappdata(fig,'dhstate',S);
+dhIKDraw(fig);
+end
+
+
+% ------------------------------------------ showing several postures at once
+function c = dhGhostColours()
+% One colour per alternative posture (the solver returns at most 8). Strong
+% enough to tell the ghosts apart, translucent enough not to hide the solid
+% arm.
+c = [0.20 0.45 0.85;    % blue
+     0.90 0.55 0.10;    % orange
+     0.25 0.65 0.30;    % green
+     0.65 0.35 0.75;    % purple
+     0.10 0.65 0.70;    % teal
+     0.80 0.30 0.35;    % red
+     0.55 0.55 0.15;    % olive
+     0.40 0.40 0.45];   % slate
+end
+
+
+function G = dhGhostScene(ax, N, col, DH, L)
+% A copy of the robot drawn as a translucent ghost: links and joints only, no
+% frame axes, no end marker, no projection lines. Created on demand (once per
+% chip) and afterwards only moved, exactly like the two real scenes.
+G = dhCreateScene(ax, N);
+G = dhSetGeometry(G, DH, L);
+set([G.link G.col G.rail G.joint], 'FaceColor',col, 'FaceAlpha',0.70, ...
+    'EdgeColor','none');
+set([G.frame G.marker G.proj G.foot], 'Visible','off');
+for h = [G.link G.col G.rail G.joint]
+    uistack(h,'bottom');                 % ghosts sit behind the solid arm
+end
+end
+
+
+function S = dhGhostDraw(S, L)
+% Draw the postures whose chip is ticked and hide the rest. The selected
+% posture is never drawn as a ghost: it is the solid arm.
+n = numel(S.sols);
+for k = 1:8
+    g = S.ghost{k};
+    if k > n || k == S.solIdx || ~S.ghostOn(k)
+        if ~isempty(g) && isgraphics(g.link)
+            set([g.link g.col g.rail g.joint], 'Visible','off');
+        end
+        continue
+    end
+    if isempty(g) || ~isgraphics(g.link)
+        g = dhGhostScene(S.axI, S.N, S.chipCol(k,:), S.DH, L);
+        S.ghost{k} = g;
+    end
+    [T, Tf] = dhFKchain(S.DH, S.sols(k).q);
+    dhUpdateVisuals(g, S.N, Tf, T(1:3,4), S.reachPlot);
+    set([g.link g.col g.rail g.joint], 'Visible','on');
+end
+end
+
+
+function dhChipPaint(S)
+% One chip per posture, in the colour of its ghost. A chip is pressed when its
+% posture is on screen; the selected posture is always on screen, as the solid
+% arm. The whole row only appears when there is something to compare.
+n = numel(S.sols);
+if n >= 2, vis = 'on'; else, vis = 'off'; end
+set(S.chkAll,'Visible',vis);
+for k = 1:8
+    c = S.solChip(k);
+    if k > n || n < 2
+        set(c,'Visible','off','Value',0);
+        continue
+    end
+    on = S.ghostOn(k) || k == S.solIdx;
+    set(c,'Visible','on','Value',double(on));
+    if on
+        set(c,'BackgroundColor',S.chipCol(k,:),'ForegroundColor',[1 1 1]);
+    else
+        set(c,'BackgroundColor',[0.90 0.90 0.90], ...
+            'ForegroundColor',0.75*S.chipCol(k,:));
+    end
+    if k == S.solIdx
+        set(c,'TooltipString',['This posture is the solid arm - use < > ' ...
+                               'to select another']);
+    else
+        set(c,'TooltipString',sprintf('Show posture %d as a ghost',k));
+    end
+end
+end
+
+
+function dhShowAll(fig)
+% "Show all": tick or clear every posture chip at once.
+S = getappdata(fig,'dhstate');
+if ~isvalid(fig) || isempty(S), return; end
+on = get(S.chkAll,'Value') == 1;
+n  = numel(S.sols);
+S.showAll = on;
+S.ghostOn = false(1,8);
+S.ghostOn(1:n) = on;
+setappdata(fig,'dhstate',S);
+dhIKDraw(fig);
+end
+
+
+function dhChipToggle(fig, k)
+% One chip: show or hide that posture as a ghost.
+S = getappdata(fig,'dhstate');
+if ~isvalid(fig) || isempty(S) || isempty(S.sols), return; end
+if k == S.solIdx
+    set(S.solChip(k),'Value',1);         % the solid arm cannot be switched off
+    return
+end
+S.ghostOn(k) = get(S.solChip(k),'Value') == 1;
+n = numel(S.sols);
+S.showAll = all(S.ghostOn(1:n));
+set(S.chkAll,'Value',double(S.showAll));
 setappdata(fig,'dhstate',S);
 dhIKDraw(fig);
 end

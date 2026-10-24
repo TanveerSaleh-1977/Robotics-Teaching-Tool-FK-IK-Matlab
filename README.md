@@ -3,7 +3,8 @@
 Two arms, one window. On the left you drive a 2–4 DOF robot with joint sliders and read the
 pose of the tool frame. On the right you type the pose you *want*, and a damped-least-squares
 solver finds joint values that put the same arm there. The target is drawn as a **dashed ghost
-frame**, so the gap between "asked" and "achieved" is visible, not just printed.
+frame**, so the gap between "asked" and "achieved" is visible, not just printed. Where several
+postures reach the same pose, tick **Show all** and every one of them is drawn side by side.
 
 ![Forward kinematics on the left, inverse kinematics on the right: a planar 3R arm at the pose the solver found for x = 0.45, y = 0.20, yaw = 60°](screenshots/fk_ik_planar.png)
 
@@ -95,9 +96,30 @@ matters when a class is following along.
 | **Use FK pose** | copy the left panel's pose into the six boxes. The target is then guaranteed reachable, so the solver must return the left panel's joint values — the cleanest check that FK and IK agree. |
 | **Apply to FK** | put the selected solution on the left sliders, so both arms stand in the same pose |
 | **< >** | step through the other solutions found for the same target |
+| **Show all** | draw **every** posture the solver found at once: the selected one solid, the others as coloured ghosts |
+| **1 2 3 …** | one chip per posture, coloured like its ghost — tick the ones you want on screen |
 | **Ignore orientation** | solve for position only — the right choice when the arm has fewer than 6 DOF |
 | **XY / YZ / ZX / 3D** | set the camera of **both** plots at once (orthographic for the plane views) |
 | **New robot** | change the configuration without restarting MATLAB |
+
+---
+
+## Showing several postures at once
+
+A pose usually has more than one posture (elbow up / elbow down), and a class should see them
+together. The row under `< >` has **one chip per posture**, in the colour of the ghost it draws:
+
+* the posture selected with `< >` is always the **solid** arm, and its chip stays pressed;
+* tick another chip and that posture is drawn as a **translucent ghost** in the same colour, so
+  several postures share one picture;
+* **Show all** ticks every chip at once — the quick answer to *"show me all the ways this arm
+  can reach that pose"*;
+* `< >` then walks the solid arm through the postures while the ghosts stay where they are.
+
+The chips appear only when the solver found at least two postures. *Show all* is remembered:
+tick it once and every new target is solved and drawn with all of its postures.
+
+![Both postures for one pose: the solid arm is the selected one, the orange ghost is the other one the solver found](screenshots/fk_ik_all.png)
 
 ---
 
@@ -125,7 +147,7 @@ reach, out of stroke, or *tick "Ignore orientation"*.
    plane, so the residual is 300 mm. Tick *Ignore orientation*: the arm now gets as close as
    it can, and the ghost shows the gap.
 3. **Two postures.** `x = 0.45, y = 0.20, z = 0, yaw = 60`: press `<` and `>` to flip between
-   elbow-up and elbow-down.
+   elbow-up and elbow-down, then tick *Show all* to see both at once.
 4. **A slide at its limit.** SCARA `RRPR`, lengths `0.35 0.25 0.20 0`, offsets `0.50 0 0 0`,
    target `z = 0.25` with the shoulder at 0.50: the slide needs 250 mm but has a 200 mm stroke,
    so `q3` stops at −200 mm and the readout says 50 mm.
@@ -156,7 +178,7 @@ Toolbox and against finite differences:
 | File | Purpose |
 |------|---------|
 | `DH_Robot_FK_IK.m` | The script described above — the whole tool in one file. |
-| `screenshots/` | The two images used above. |
+| `screenshots/` | The three images used above. |
 | `LICENSE` | MIT. |
 
 ---
