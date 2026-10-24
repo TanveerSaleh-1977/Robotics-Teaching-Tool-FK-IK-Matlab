@@ -5,9 +5,10 @@
 %
 %  WHAT IT DOES
 %  ------------
-%  The companion script DH_Robot_LiveScript.m derives the DH table and the
-%  symbolic HTMs and lets you drive a 2-4 DOF arm FORWARD with sliders. This
-%  script adds the other direction and puts both on screen at once:
+%  The forward-only teaching script (DH_Robot_LiveScript.m, published as a
+%  separate project) derives the DH table and the symbolic HTMs and lets you
+%  drive a 2-4 DOF arm FORWARD with sliders. This script adds the other
+%  direction and puts both on screen at once:
 %
 %      +---------------------------+   +---------------------------+
 %      |  FORWARD kinematics       |   |  INVERSE kinematics       |
@@ -110,7 +111,7 @@
 %  FILE MAP
 %  --------
 %   section 0  environment check
-%   section 1  configuration form (same as the companion script)
+%   section 1  configuration form (same layout as the forward-only script)
 %   section 2  DH table and the numeric FK check
 %   section 3  the window: two linked 3-D panels + controls
 %   section 4  local functions: form, DH math, FK, IK, graphics, callbacks
@@ -289,7 +290,7 @@ uicontrol(fig,'Style','text','Units','normalized', ...
     'BackgroundColor',[0.94 0.94 0.94],'ForegroundColor',[0.35 0.35 0.35]);
 
 % --- LEFT panel: joint sliders and link-length sliders -------------------
-% Same rows as the companion script:  [ label ][ slider ][ box ][ range ]
+% Same rows as the forward-only script:  [ label ][ slider ][ box ][ range ]
 nRows = 2*N + 2;                       % 2 header rows + N joints + N lengths
 rowH  = min(0.105, 0.720/nRows);
 topY  = 0.935;                         % first row sits under the panel title
