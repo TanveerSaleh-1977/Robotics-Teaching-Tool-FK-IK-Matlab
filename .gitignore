@@ -1,0 +1,10 @@
+# MATLAB
+*.asv
+*.m~
+slprj/
+*.autosave
+*.slxc
+
+# Windows
+Thumbs.db
+desktop.ini
