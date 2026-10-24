@@ -1124,18 +1124,6 @@ zl  = [zmin - pad, zmax + pad];
 end
 
 
-function [posX, posY, posZ] = dhProjectionLabelPos(pEnd, reach)
-% Where the projected x, y and z values are written.
-if ~(reach > 0), reach = 1; end
-x = pEnd(1); y = pEnd(2); z = pEnd(3);
-m = 0.12 * reach;
-
-posX = [x, -m, 0];
-posY = [-m, y, 0];
-posZ = [x,  y, z + 0.085*reach];
-end
-
-
 function G = dhCreateScene(ax, N)
 % Create the whole scene ONCE and hand back its handles.
 %
@@ -1187,15 +1175,6 @@ G.foot = gobjects(1,3);
 for a = 1:3
     G.foot(a) = plot3(ax,0,0,0,'o','LineStyle','none','MarkerSize',5, ...
         'MarkerFaceColor',G.frameCol{a},'MarkerEdgeColor','none','Clipping','on');
-end
-
-G.ptxt = gobjects(1,3);
-for a = 1:3
-    G.ptxt(a) = text(ax,0,0,0,' ','Color',[0.08 0.08 0.08], ...
-        'FontSize',10,'FontWeight','bold', ...
-        'BackgroundColor',[1 1 1],'EdgeColor',[0.45 0.45 0.45], ...
-        'Margin',3,'Interpreter','none','Clipping','off', ...
-        'HorizontalAlignment','center','VerticalAlignment','middle');
 end
 end
 
@@ -1399,23 +1378,6 @@ set(G.foot(3),'XData',Pf(1),'YData',Pf(2),'ZData',Pf(3));
 end
 
 
-function dhUpdateProjectionText(G, pEnd, reach)
-% Write the projected x, y and z values beside their projection lines. This
-% runs with the readout, not on every animation frame: moving lines is cheap,
-% repainting text is not.
-if ~(reach > 0), reach = 1; end
-x = pEnd(1); y = pEnd(2); z = pEnd(3);
-[posX, posY, posZ] = dhProjectionLabelPos(pEnd, reach);
-
-set(G.ptxt(1), 'Position',posX, 'String',sprintf('x = %.2f m',x), ...
-    'HorizontalAlignment','center', 'VerticalAlignment','top');
-set(G.ptxt(2), 'Position',posY, 'String',sprintf('y = %.2f m',y), ...
-    'HorizontalAlignment','right', 'VerticalAlignment','middle');
-set(G.ptxt(3), 'Position',posZ, 'String',sprintf('z = %.2f m',z), ...
-    'HorizontalAlignment','center', 'VerticalAlignment','bottom');
-end
-
-
 function [V, F] = dhCylinderMesh(ns)
 % Unit cylinder: radius 1, height 1, axis along +z, centred on the origin.
 th = linspace(0,2*pi,ns+1).'; th(end) = [];
@@ -1553,7 +1515,6 @@ setappdata(fig,'dhstate',S);
 
 set(get(S.axF,'Title'),'String', sprintf( ...
     '%d-DOF %s %s   |   FORWARD: joints -> pose', N, upper(S.jointSeq), S.typeStr));
-dhUpdateProjectionText(S.gF, pEnd, S.reachPlot);
 
 [roll, pitch, yaw] = dhR2rpy(Tee(1:3,1:3));
 lines = { ...
@@ -1815,7 +1776,6 @@ sol = S.sols(S.solIdx);
 
 [T, Tf] = dhFKchain(S.DH, sol.q);
 dhUpdateVisuals(S.gI, S.N, Tf, T(1:3,4), S.reachPlot);
-dhUpdateProjectionText(S.gI, T(1:3,4), S.reachPlot);
 dhUpdateTarget(S.gt, S.Tt, S.reachPlot);
 
 % The gap between "asked" and "achieved", drawn as a dotted red segment.

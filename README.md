@@ -156,7 +156,6 @@ Toolbox and against finite differences:
 | File | Purpose |
 |------|---------|
 | `DH_Robot_FK_IK.m` | The script described above — the whole tool in one file. |
-| `DH_Robot_LiveScript.m` | The companion forward-only teaching script this one grew out of: symbolic (general) HTMs beside their numeric values, a guided DH-table walkthrough, and a standalone Windows build. Included so the references in the comments resolve; `DH_Robot_FK_IK.m` does not call it. |
 | `screenshots/` | The two images used above. |
 | `LICENSE` | MIT. |
 
