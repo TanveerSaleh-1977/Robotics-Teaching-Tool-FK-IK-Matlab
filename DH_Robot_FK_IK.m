@@ -2141,7 +2141,15 @@ ax = ancestor(hittest(fig), 'axes');
 if isempty(ax) || ~any(ax == [S.axF S.axI]), return; end
 n = double(e.VerticalScrollCount);
 if n == 0, return; end
-f = 0.90 ^ (-n);                       % wheel up (n < 0) zooms in
+dhZoomPair(fig, ax, 0.90 ^ (-n));       % wheel up (n < 0) zooms in
+end
+
+
+function dhZoomPair(fig, ax, f)
+% Zoom one panel, and the other one too when the views are linked, so the two
+% arms always stay at the same scale.
+S = getappdata(fig,'dhstate');
+if ~isvalid(fig) || isempty(S), return; end
 dhZoomAxes(ax, f);
 if get(S.chkLink,'Value') == 1
     if ax == S.axF, other = S.axI; else, other = S.axF; end
@@ -2225,11 +2233,8 @@ if ~isempty(S.linkHandle)
     S.linkHandle = [];
 end
 if get(S.chkLink,'Value') == 1
-    % CameraViewAngle is part of the link so that a scroll-wheel zoom on one
-    % plot zooms the other one too (orthographic plane views zoom by moving the
-    % camera, which the position/target/up-vector link already covers).
     S.linkHandle = linkprop([S.axF S.axI], ...
-        {'CameraPosition','CameraTarget','CameraUpVector','CameraViewAngle'});
+        {'CameraPosition','CameraTarget','CameraUpVector'});
 end
 setappdata(fig,'dhstate',S);
 end
