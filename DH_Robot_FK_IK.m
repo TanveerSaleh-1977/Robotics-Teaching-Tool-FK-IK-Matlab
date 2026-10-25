@@ -1604,6 +1604,7 @@ if ~isempty(S.Tt) && abs(S.Tt(3,4)) <= 1.5*robotReach
 end
 
 S.reachPlot = rp;
+S.zlimPlot  = zl;      % the frame applyView() puts on screen
 setappdata(fig,'dhstate',S);
 applyView(S.axF, rp, zl);
 applyView(S.axI, rp, zl);
@@ -2195,14 +2196,21 @@ end
 
 
 function tf = dhOutsideView(S, p)
-% True when the point is outside the box currently on screen (5% margin). Used
-% to avoid re-fitting - and so undoing a mouse zoom - for a target that is
-% already in view.
-xl = xlim(S.axI); yl = ylim(S.axI); zl = zlim(S.axI);
-mx = 0.05*(xl(2)-xl(1)); my = 0.05*(yl(2)-yl(1)); mz = 0.05*(zl(2)-zl(1));
-tf = p(1) < xl(1)-mx || p(1) > xl(2)+mx || ...
-     p(2) < yl(1)-my || p(2) > yl(2)+my || ...
-     p(3) < zl(1)-mz || p(3) > zl(2)+mz;
+% True when the point lies outside the FITTED frame - the box dhFitViews() puts
+% on screen for this robot and target - not outside whatever the mouse has
+% zoomed to. A solve therefore keeps the zoom whenever the target is already
+% inside the frame, and only re-frames for a target that would be cut off.
+lim = 1.18 * S.reachPlot;
+if isempty(S.reachPlot) || ~(lim > 0)
+    tf = true;                       % no frame known yet: fit it
+    return;
+end
+if isfield(S,'zlimPlot') && numel(S.zlimPlot) == 2
+    zl = S.zlimPlot;
+else
+    zl = [-lim lim];
+end
+tf = abs(p(1)) > lim || abs(p(2)) > lim || p(3) < zl(1) || p(3) > zl(2);
 end
 
 
