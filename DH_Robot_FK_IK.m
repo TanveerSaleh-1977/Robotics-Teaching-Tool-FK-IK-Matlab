@@ -245,9 +245,11 @@ axF = axes(fig,'Units','normalized', ...
     'Position',[0.030 0.475 0.455 0.415],'Box','on');
 axI = axes(fig,'Units','normalized', ...
     'Position',[0.515 0.475 0.455 0.415],'Box','on');
-% Install both axes interactions explicitly. Setting only rotateInteraction
-% replaces MATLAB's default set and silently removes the wheel-zoom interaction.
-% Keeping zoomInteraction here restores scroll zoom without needing a toolbar mode.
+% Mouse control is handled by this program, not by MATLAB's axes interaction
+% layer: drag a plot to orbit it, roll the wheel to zoom it (dhInstallMouse).
+% The built-in layer is switched off so that nothing else moves the camera and
+% the two views always agree. Everything is done with view() and the axis
+% limits, so no camera mode is ever forced and the plane views keep working.
 try
     axF.Toolbar.Visible = 'off';
     axI.Toolbar.Visible = 'off';
@@ -255,10 +257,11 @@ catch
 end
 for ax = [axF axI]
     try
-        ax.Interactions = [rotateInteraction zoomInteraction];
+        ax.Interactions = [];
     catch
     end
 end
+dhInstallMouse(fig);
 
 % Control panels under each plot.
 pF = uipanel(fig,'Units','normalized', ...
@@ -496,7 +499,7 @@ S = struct( ...
     'useOrient',true, 'reach',reach0, 'reachPlot',reach0, ...
     'lastJoint',qInit, 'lastLen',linkLengths*1000, ...
     'animating',false, 'tLastRebuild',tic, 'tText',tic, ...
-    'textStale',false, 'planeView','', 'linkHandle',[]);
+    'textStale',false, 'planeView','');
 setappdata(fig,'dhstate',S);
 
 for i = 1:N
@@ -1135,18 +1138,113 @@ if nargin < 3 || isempty(zl), zl = [-lim lim]; end
 axis(ax,'equal');
 xlim(ax, [-lim lim]); ylim(ax, [-lim lim]); zlim(ax, zl);
 view(ax, az, el);
-dhManualCamera(ax);
 grid(ax,'on');
 end
 
 
-function dhManualCamera(ax)
-% Keep mouse-driven camera changes from being discarded by an axes redraw.
-% linkprop happens to force these modes to manual, which is why orbiting only
-% became reliable after the user enabled Link views; do it for both axes always.
-ax.CameraPositionMode = 'manual';
-ax.CameraTargetMode   = 'manual';
-ax.CameraUpVectorMode = 'manual';
+function dhInstallMouse(fig)
+% Install the mouse handlers: drag to orbit, wheel to zoom. The axes' own
+% interaction layer is switched off, so this is the only thing that moves the
+% camera - which also means the two views can be kept in step without linkprop.
+set(fig, 'WindowButtonDownFcn',   @(~,~) dhMouseDown(fig), ...
+         'WindowButtonMotionFcn', @(~,~) dhMouseMove(fig), ...
+         'WindowButtonUpFcn',     @(~,~) dhMouseUp(fig), ...
+         'WindowScrollWheelFcn',  @(~,e) dhWheelZoom(fig, e));
+end
+
+
+function dhMouseDown(fig)
+% Start an orbit if the press landed on one of the two plots.
+S = getappdata(fig,'dhstate');
+if ~isvalid(fig) || isempty(S), return; end
+if ~strcmp(get(fig,'SelectionType'),'normal'), return; end    % left button only
+ax = ancestor(hittest(fig), 'axes');
+if isempty(ax) || ~any(ax == [S.axF S.axI]), return; end
+[az, el] = view(ax);
+S.drag = struct('ax',ax, 'p0',get(fig,'CurrentPoint'), ...
+                'az0',az, 'el0',el, 'moved',false);
+setappdata(fig,'dhstate',S);
+end
+
+
+function dhMouseMove(fig)
+% Orbit while the mouse is dragged: horizontal motion turns, vertical motion
+% tilts. The other plot follows when "Link views" is ticked.
+S = getappdata(fig,'dhstate');
+if ~isvalid(fig) || isempty(S) || ~isfield(S,'drag') || isempty(S.drag), return; end
+d  = S.drag;
+p  = get(fig,'CurrentPoint');
+dx = p(1) - d.p0(1);
+dy = p(2) - d.p0(2);
+if ~d.moved && hypot(dx,dy) < 2, return; end     % ignore a jittery click
+S.drag.moved = true;
+setappdata(fig,'dhstate',S);
+dhOrbitTo(S, d.ax, d.az0 - 0.4*dx, d.el0 + 0.4*dy);
+end
+
+
+function dhMouseUp(fig)
+S = getappdata(fig,'dhstate');
+if ~isvalid(fig) || isempty(S), return; end
+S.drag = [];
+setappdata(fig,'dhstate',S);
+end
+
+
+function dhOrbitTo(S, ax, az, el)
+% Look at the box from this direction. view() keeps the up vector consistent,
+% so a top-down plane view can never end up with a degenerate camera.
+el = min(max(el, -89.9), 89.9);
+view(ax, az, el);
+if get(S.chkLink,'Value') == 1
+    if ax == S.axF, other = S.axI; else, other = S.axF; end
+    view(other, az, el);
+end
+drawnow limitrate;
+end
+
+
+function dhWheelZoom(fig, e)
+% Mouse-wheel zoom on the plot under the pointer. The limits are scaled about
+% their centre and the camera is re-framed with view(), so the drawing grows
+% inside its own box instead of the box growing out over the other plot.
+S = getappdata(fig,'dhstate');
+if ~isvalid(fig) || isempty(S), return; end
+ax = ancestor(hittest(fig), 'axes');
+if isempty(ax) || ~any(ax == [S.axF S.axI]), return; end
+n = double(e.VerticalScrollCount);
+if n == 0, return; end
+dhZoomPair(S, ax, 0.90 ^ (-n));        % wheel up (n < 0) zooms in
+end
+
+
+function dhZoomPair(S, ax, f)
+% Zoom one plot, and the other one too when the views are linked.
+dhZoomAxes(ax, f);
+if get(S.chkLink,'Value') == 1
+    if ax == S.axF, other = S.axI; else, other = S.axF; end
+    dhZoomAxes(other, f);
+end
+end
+
+
+function dhZoomAxes(ax, f)
+% Zoom by the factor f (< 1 zooms in): every range shrinks about its centre and
+% the camera is re-framed, so axis('equal') and the box shape are preserved.
+[az, el] = view(ax);
+xlim(ax, dhScaleRange(xlim(ax), f));
+ylim(ax, dhScaleRange(ylim(ax), f));
+zlim(ax, dhScaleRange(zlim(ax), f));
+view(ax, az, el);
+end
+
+
+function v = dhScaleRange(v, f)
+% One axis range scaled by f about its centre, kept clear of a degenerate range.
+c = 0.5*(v(1)+v(2));
+h = 0.5*(v(2)-v(1))*f;
+if ~(h > 1e-6), h = 1e-6; end
+v = [c-h, c+h];
 end
 
 
@@ -2130,7 +2228,6 @@ switch which
         S.planeView = '';
 end
 
-for a = axs, dhManualCamera(a); end
 setappdata(fig,'dhstate',S);
 dhMarkViewButton(fig, S.planeView);
 end
@@ -2182,25 +2279,18 @@ end
 
 
 function dhLinkViews(fig)
-% Link (or unlink) the two cameras, so orbiting one plot moves the other.
+% "Link views" is read directly by the mouse handlers (dhOrbitTo / dhZoomPair),
+% so natively there is nothing to link. Ticking it copies the forward panel's
+% view onto the inverse panel, so the two start from the same direction.
 S = getappdata(fig,'dhstate');
 if isempty(S) || ~isvalid(fig), return; end
-if ~isempty(S.linkHandle)
-    try
-        delete(S.linkHandle);
-    catch
-    end
-    S.linkHandle = [];
-end
 if get(S.chkLink,'Value') == 1
-    S.linkHandle = linkprop([S.axF S.axI], ...
-        {'CameraPosition','CameraTarget','CameraUpVector', ...
-         'CameraViewAngle','XLim','YLim','ZLim'});
+    [az, el] = view(S.axF);
+    view(S.axI, az, el);
+    xlim(S.axI, xlim(S.axF));
+    ylim(S.axI, ylim(S.axF));
+    zlim(S.axI, zlim(S.axF));
 end
-% linkprop can mask the axes' camera modes. Keep them explicit on both the
-% linked and unlinked path so orbit/zoom never depends on toggling this checkbox.
-dhManualCamera(S.axF);
-dhManualCamera(S.axI);
 setappdata(fig,'dhstate',S);
 end
 
