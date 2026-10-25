@@ -1135,7 +1135,18 @@ if nargin < 3 || isempty(zl), zl = [-lim lim]; end
 axis(ax,'equal');
 xlim(ax, [-lim lim]); ylim(ax, [-lim lim]); zlim(ax, zl);
 view(ax, az, el);
+dhManualCamera(ax);
 grid(ax,'on');
+end
+
+
+function dhManualCamera(ax)
+% Keep mouse-driven camera changes from being discarded by an axes redraw.
+% linkprop happens to force these modes to manual, which is why orbiting only
+% became reliable after the user enabled Link views; do it for both axes always.
+ax.CameraPositionMode = 'manual';
+ax.CameraTargetMode   = 'manual';
+ax.CameraUpVectorMode = 'manual';
 end
 
 
@@ -2119,6 +2130,7 @@ switch which
         S.planeView = '';
 end
 
+for a = axs, dhManualCamera(a); end
 setappdata(fig,'dhstate',S);
 dhMarkViewButton(fig, S.planeView);
 end
@@ -2185,6 +2197,10 @@ if get(S.chkLink,'Value') == 1
         {'CameraPosition','CameraTarget','CameraUpVector', ...
          'CameraViewAngle','XLim','YLim','ZLim'});
 end
+% linkprop can mask the axes' camera modes. Keep them explicit on both the
+% linked and unlinked path so orbit/zoom never depends on toggling this checkbox.
+dhManualCamera(S.axF);
+dhManualCamera(S.axI);
 setappdata(fig,'dhstate',S);
 end
 
