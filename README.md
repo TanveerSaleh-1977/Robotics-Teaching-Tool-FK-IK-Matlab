@@ -104,9 +104,11 @@ matters when a class is following along.
 | **New robot** | change the configuration without restarting MATLAB |
 
 The mouse needs no mode selected first: **drag a plot to orbit it** and **roll the wheel to zoom**
-the plot under the pointer (with *Link views* ticked both plots zoom together). Pressing
-*Solve IK* no longer re-frames the view unless the new target is outside the box on screen, so a
-zoom survives a solve; **Fit** restores the framed view at any time.
+the plot under the pointer (with *Link views* ticked both plots zoom together). The zoom scales the
+axes limits and re-frames the camera, so the drawing grows *inside* its own frame instead of the 3-D
+box spilling over the neighbouring panel. Pressing *Solve IK* no longer re-frames the view unless the
+new target is outside the box on screen, so a zoom survives a solve; **Fit** restores the framed view
+at any time.
 
 ---
 

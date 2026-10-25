@@ -92,8 +92,10 @@
 %                     linked, so the two arms are always seen from one viewpoint.
 %                     The mouse wheel zooms the plot under the pointer (both
 %                     plots when "Link views" is ticked) and "Fit" goes back to
-%                     the fitted view; drag a plot to orbit.
-%                     "New robot" reopens the form to change the configuration.
+%                     the fitted view; drag a plot to orbit. The zoom grows the
+%                     drawing inside its own frame, so the two plots never
+%                     overlap. "New robot" reopens the form to change the
+%                     configuration.
 %
 %  EXAMPLES TO TRY
 %  ---------------
@@ -245,16 +247,24 @@ axF = axes(fig,'Units','normalized', ...
     'Position',[0.030 0.475 0.455 0.415],'Box','on');
 axI = axes(fig,'Units','normalized', ...
     'Position',[0.515 0.475 0.455 0.415],'Box','on');
-% Mouse handling is left to the axes' own interaction layer: dragging a plot
-% orbits it and the scroll wheel zooms it, with no toolbar mode to select first.
-% The older rotate3d MODE is deliberately NOT switched on - while it is active
-% it takes the mouse away from the axes (it even clears the figure's
-% WindowScrollWheelFcn), and scroll-wheel zoom stops working.
+% Mouse handling is explicit. Dragging a plot orbits it (rotateInteraction) and
+% the scroll wheel zooms it (dhWheelZoom, installed here). MATLAB's built-in
+% zoom interaction is deliberately left out: it dollies the camera, which makes
+% the 3-D box grow OUTSIDE its own axes rectangle (over the neighbouring plot),
+% and while the camera is in 'auto' mode the dolly is silently undone - which is
+% why zooming used to work only after "Link views" had forced the camera manual.
 try
     axF.Toolbar.Visible = 'off';
     axI.Toolbar.Visible = 'off';
 catch
 end
+for ax = [axF axI]
+    try
+        ax.Interactions = rotateInteraction;
+    catch
+    end
+end
+fig.WindowScrollWheelFcn = @(~,e) dhWheelZoom(fig, e);
 
 % Control panels under each plot.
 pF = uipanel(fig,'Units','normalized', ...
@@ -1122,11 +1132,15 @@ function applyView(ax, reach, zl)
 % Zoom the axes to the robot's reach so it fills the view, with equal scales.
 % axis('equal') must come FIRST: it re-fits the limits, so it would undo any
 % limits set before it. Setting the limits afterwards keeps the view stable.
+% The camera is then re-framed on the new box with the SAME view direction: a
+% camera left where it was would draw the box outside the axes rectangle.
 if ~(reach > 0), reach = 1; end
 lim = 1.18 * reach;      % slack so the projections and their labels fit inside
 if nargin < 3 || isempty(zl), zl = [-lim lim]; end
+[az, el] = view(ax);
 axis(ax,'equal');
 xlim(ax, [-lim lim]); ylim(ax, [-lim lim]); zlim(ax, zl);
+view(ax, az, el);
 grid(ax,'on');
 end
 
@@ -2112,6 +2126,52 @@ end
 
 setappdata(fig,'dhstate',S);
 dhMarkViewButton(fig, S.planeView);
+end
+
+
+function dhWheelZoom(fig, e)
+% Mouse-wheel zoom for the plot under the pointer (both plots when the views are
+% linked). The zoom is done by scaling the three limits about their centre and
+% then re-framing the camera with view(); the camera is never dollied, so the
+% 3-D box always stays inside its own axes rectangle and cannot overlap the
+% other panel.
+S = getappdata(fig,'dhstate');
+if ~isvalid(fig) || isempty(S), return; end
+ax = ancestor(hittest(fig), 'axes');
+if isempty(ax) || ~any(ax == [S.axF S.axI]), return; end
+n = double(e.VerticalScrollCount);
+if n == 0, return; end
+f = 0.90 ^ (-n);                       % wheel up (n < 0) zooms in
+dhZoomAxes(ax, f);
+if get(S.chkLink,'Value') == 1
+    if ax == S.axF, other = S.axI; else, other = S.axF; end
+    dhZoomAxes(other, f);
+end
+end
+
+
+function dhZoomAxes(ax, f)
+% Zoom one axes by the factor f (< 1 zooms in): the limits shrink about their
+% centre and the camera is re-framed on the new box with the same view direction,
+% so the drawing grows inside the box instead of the box growing out of it.
+% All three limits are scaled by the same factor, so axis('equal') still holds.
+[az, el] = view(ax);
+if strcmpi(camproj(ax), 'perspective')
+    ax.CameraViewAngleMode = 'auto';    % the zoom is limit-based, so keep the fit
+end
+xlim(ax, dhScaleRange(xlim(ax), f));
+ylim(ax, dhScaleRange(ylim(ax), f));
+zlim(ax, dhScaleRange(zlim(ax), f));
+view(ax, az, el);
+end
+
+
+function v = dhScaleRange(v, f)
+% One axis range scaled by f about its centre, kept clear of a degenerate range.
+c = 0.5*(v(1)+v(2));
+h = 0.5*(v(2)-v(1))*f;
+if ~(h > 1e-6), h = 1e-6; end
+v = [c-h, c+h];
 end
 
 
