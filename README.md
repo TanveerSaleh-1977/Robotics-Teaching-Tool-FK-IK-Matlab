@@ -100,7 +100,13 @@ matters when a class is following along.
 | **1 2 3 …** | one chip per posture, coloured like its ghost — tick the ones you want on screen |
 | **Ignore orientation** | solve for position only — the right choice when the arm has fewer than 6 DOF |
 | **XY / YZ / ZX / 3D** | set the camera of **both** plots at once (orthographic for the plane views) |
+| **Fit** | back to the fitted view — undoes a mouse-wheel zoom |
 | **New robot** | change the configuration without restarting MATLAB |
+
+The mouse needs no mode selected first: **drag a plot to orbit it** and **roll the wheel to zoom**
+the plot under the pointer (with *Link views* ticked both plots zoom together). Pressing
+*Solve IK* no longer re-frames the view unless the new target is outside the box on screen, so a
+zoom survives a solve; **Fit** restores the framed view at any time.
 
 ---
 

@@ -90,6 +90,9 @@
 %                                    want on screen (coloured ghosts).
 %   TOP               XY / YZ / ZX / 3D set the camera of BOTH panels; they are
 %                     linked, so the two arms are always seen from one viewpoint.
+%                     The mouse wheel zooms the plot under the pointer (both
+%                     plots when "Link views" is ticked) and "Fit" goes back to
+%                     the fitted view; drag a plot to orbit.
 %                     "New robot" reopens the form to change the configuration.
 %
 %  EXAMPLES TO TRY
@@ -242,9 +245,11 @@ axF = axes(fig,'Units','normalized', ...
     'Position',[0.030 0.475 0.455 0.415],'Box','on');
 axI = axes(fig,'Units','normalized', ...
     'Position',[0.515 0.475 0.455 0.415],'Box','on');
-% Explicitly enable drag-to-orbit; relying on the figure toolbar leaves the
-% axes in a mode-dependent state and makes mouse dragging appear intermittent.
-rotate3d(fig,'on');
+% Mouse handling is left to the axes' own interaction layer: dragging a plot
+% orbits it and the scroll wheel zooms it, with no toolbar mode to select first.
+% The older rotate3d MODE is deliberately NOT switched on - while it is active
+% it takes the mouse away from the axes (it even clears the figure's
+% WindowScrollWheelFcn), and scroll-wheel zoom stops working.
 try
     axF.Toolbar.Visible = 'off';
     axI.Toolbar.Visible = 'off';
@@ -283,15 +288,20 @@ uicontrol(fig,'Style','pushbutton','Units','normalized', ...
     'TooltipString',['Define a different robot (joint sequence, lengths, ' ...
                      'twists, offsets) without restarting the program'], ...
     'Callback', @(~,~) dhNewRobot(fig));
+uicontrol(fig,'Style','pushbutton','Units','normalized', ...
+    'Position',[0.383 vbY 0.062 vbH], ...
+    'String','Fit','FontSize',9,'FontWeight','bold', ...
+    'TooltipString','Back to the fitted view (undoes a mouse-wheel zoom)', ...
+    'Callback', @(~,~) dhFitButton(fig));
 chkLink = uicontrol(fig,'Style','checkbox','Units','normalized', ...
-    'Position',[0.395 vbY 0.095 vbH], ...
+    'Position',[0.455 vbY 0.095 vbH], ...
     'String','Link views','Value',0,'FontSize',9, ...
     'BackgroundColor',[0.94 0.94 0.94], ...
     'TooltipString','Keep both cameras on the same viewpoint', ...
     'Callback', @(~,~) dhLinkViews(fig));
 uicontrol(fig,'Style','text','Units','normalized', ...
-    'Position',[0.520 vbY 0.450 vbH], ...
-    'String','Drag either plot to orbit.  Type a target on the right and press Enter.', ...
+    'Position',[0.565 vbY 0.410 vbH], ...
+    'String','Drag to orbit, scroll to zoom.  Type a target on the right.', ...
     'FontSize',9,'HorizontalAlignment','left', ...
     'BackgroundColor',[0.94 0.94 0.94],'ForegroundColor',[0.35 0.35 0.35]);
 
@@ -1786,7 +1796,13 @@ S.useOrient = get(S.chkOrient,'Value') == 0;
 setappdata(fig,'dhstate',S);
 
 [q0, L] = dhReadQL(fig);
-dhFitViews(fig);
+% Re-fit only when the target is outside the box on screen. Re-fitting on every
+% solve would undo a zoom made with the mouse wheel; a target that IS out of
+% view gets a full fit, camera angle included, so it is actually visible.
+if dhOutsideView(S, Tt(1:3,4))
+    dhFitButton(fig);
+    S = getappdata(fig,'dhstate');
+end
 
 if ~silent
     set(S.ikHead,'String','solving ...','ForegroundColor',[0.25 0.25 0.25]);
@@ -2099,6 +2115,29 @@ dhMarkViewButton(fig, S.planeView);
 end
 
 
+function dhFitButton(fig)
+% Back to the fitted view: the same box on both panels, camera angle reset.
+S = getappdata(fig,'dhstate');
+if ~isvalid(fig) || isempty(S), return; end
+for ax = [S.axF S.axI]
+    ax.CameraViewAngleMode = 'auto';
+end
+dhFitViews(fig);
+end
+
+
+function tf = dhOutsideView(S, p)
+% True when the point is outside the box currently on screen (5% margin). Used
+% to avoid re-fitting - and so undoing a mouse zoom - for a target that is
+% already in view.
+xl = xlim(S.axI); yl = ylim(S.axI); zl = zlim(S.axI);
+mx = 0.05*(xl(2)-xl(1)); my = 0.05*(yl(2)-yl(1)); mz = 0.05*(zl(2)-zl(1));
+tf = p(1) < xl(1)-mx || p(1) > xl(2)+mx || ...
+     p(2) < yl(1)-my || p(2) > yl(2)+my || ...
+     p(3) < zl(1)-mz || p(3) > zl(2)+mz;
+end
+
+
 function dhMarkViewButton(fig, active)
 % Highlight the button of the view that is on screen ('3D' while in 3-D).
 bt = findall(fig, 'Tag','viewbutton');
@@ -2126,8 +2165,11 @@ if ~isempty(S.linkHandle)
     S.linkHandle = [];
 end
 if get(S.chkLink,'Value') == 1
+    % CameraViewAngle is part of the link so that a scroll-wheel zoom on one
+    % plot zooms the other one too (orthographic plane views zoom by moving the
+    % camera, which the position/target/up-vector link already covers).
     S.linkHandle = linkprop([S.axF S.axI], ...
-        {'CameraPosition','CameraTarget','CameraUpVector'});
+        {'CameraPosition','CameraTarget','CameraUpVector','CameraViewAngle'});
 end
 setappdata(fig,'dhstate',S);
 end
